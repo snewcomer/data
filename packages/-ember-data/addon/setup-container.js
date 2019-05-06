@@ -1,27 +1,7 @@
 import { DebugAdapter } from './-private';
 import Store from '@ember-data/store';
-import JSONAPISerializer from '@ember-data/serializer/json-api';
-import JSONSerializer from '@ember-data/serializer/json';
-import RESTSerializer from '@ember-data/serializer/rest';
 import JSONAPIAdapter from '@ember-data/adapter/json-api';
 import RESTAdapter from '@ember-data/adapter/rest';
-
-import {
-  BooleanTransform,
-  DateTransform,
-  NumberTransform,
-  StringTransform,
-} from '@ember-data/serializer/transform';
-
-function has(applicationOrRegistry, fullName) {
-  if (applicationOrRegistry.has) {
-    // < 2.1.0
-    return applicationOrRegistry.has(fullName);
-  } else {
-    // 2.1.0+
-    return applicationOrRegistry.hasRegistration(fullName);
-  }
-}
 
 /*
  Configures a registry for use with an Ember-Data
@@ -34,14 +14,11 @@ function initializeStore(registry) {
   let registerOptionsForType = registry.registerOptionsForType || registry.optionsForType;
   registerOptionsForType.call(registry, 'serializer', { singleton: false });
   registerOptionsForType.call(registry, 'adapter', { singleton: false });
-  registry.register('serializer:-default', JSONSerializer);
-  registry.register('serializer:-rest', RESTSerializer);
+
   registry.register('adapter:-rest', RESTAdapter);
-
   registry.register('adapter:-json-api', JSONAPIAdapter);
-  registry.register('serializer:-json-api', JSONAPISerializer);
 
-  if (!has(registry, 'service:store')) {
+  if (!registry.hasRegistration('service:store')) {
     registry.register('service:store', Store);
   }
 }
@@ -73,23 +50,8 @@ function initializeStoreInjections(registry) {
   inject.call(registry, 'data-adapter', 'store', 'service:store');
 }
 
-/*
- Configures a registry for use with Ember-Data
- transforms.
-
- @method initializeTransforms
- @param {Ember.Registry} registry
- */
-function initializeTransforms(registry) {
-  registry.register('transform:boolean', BooleanTransform);
-  registry.register('transform:date', DateTransform);
-  registry.register('transform:number', NumberTransform);
-  registry.register('transform:string', StringTransform);
-}
-
 export default function setupContainer(application) {
   initializeDataAdapter(application);
-  initializeTransforms(application);
   initializeStoreInjections(application);
   initializeStore(application);
 }

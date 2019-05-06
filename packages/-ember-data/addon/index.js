@@ -38,12 +38,13 @@ import 'ember-inflector';
 import setupContainer from './setup-container';
 import initializeStoreService from './initialize-store-service';
 
-import Transform, {
+import {
+  Transform,
   BooleanTransform,
   DateTransform,
   NumberTransform,
   StringTransform,
-} from '@ember-data/serializer/transform';
+} from '@ember-data/serializer/-private';
 
 import Adapter, { BuildURLMixin } from '@ember-data/adapter';
 import JSONAPIAdapter from '@ember-data/adapter/json-api';
