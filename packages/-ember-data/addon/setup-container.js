@@ -3,6 +3,17 @@ import Store from '@ember-data/store';
 import JSONAPIAdapter from '@ember-data/adapter/json-api';
 import RESTAdapter from '@ember-data/adapter/rest';
 
+function hasRegistration(application, registrationName) {
+  // fallback our ember-data tests necessary
+  // until we kill-off createStore/setupStore
+  // or @ember/test-helpers kills off it's
+  // legacy support that calls our initializer with registry
+  // instead of application
+  if (!application.hasRegistration) {
+    return application.has(registrationName);
+  }
+  return application.hasRegistration(registrationName);
+}
 /*
  Configures a registry for use with an Ember-Data
  store. Accepts an optional namespace argument.
@@ -10,16 +21,16 @@ import RESTAdapter from '@ember-data/adapter/rest';
  @method initializeStore
  @param {Ember.Registry} registry
  */
-function initializeStore(registry) {
-  let registerOptionsForType = registry.registerOptionsForType || registry.optionsForType;
-  registerOptionsForType.call(registry, 'serializer', { singleton: false });
-  registerOptionsForType.call(registry, 'adapter', { singleton: false });
+function initializeStore(application) {
+  let registerOptionsForType = application.registerOptionsForType || application.optionsForType;
+  registerOptionsForType.call(application, 'serializer', { singleton: false });
+  registerOptionsForType.call(application, 'adapter', { singleton: false });
 
-  registry.register('adapter:-rest', RESTAdapter);
-  registry.register('adapter:-json-api', JSONAPIAdapter);
+  application.register('adapter:-rest', RESTAdapter);
+  application.register('adapter:-json-api', JSONAPIAdapter);
 
-  if (!registry.hasRegistration('service:store')) {
-    registry.register('service:store', Store);
+  if (!hasRegistration(application, 'service:store')) {
+    application.register('service:store', Store);
   }
 }
 
