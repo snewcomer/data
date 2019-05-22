@@ -1498,10 +1498,10 @@ const JSONSerializer = Serializer.extend({
     if (DEBUG && !transform) {
       if (['date', 'number', 'string', 'boolean'].includes(attributeType)) {
         const Mapping = {
-          date: DateTransform,
-          boolean: BooleanTransform,
-          number: NumberTransform,
-          string: StringTransform,
+          date: 'DateTransform',
+          boolean: 'BooleanTransform',
+          number: 'NumberTransform',
+          string: 'StringTransform',
         };
 
         const Transform = require(`@ember-data/serializer/-private`)[Mapping[attributeType]];
