@@ -1,10 +1,10 @@
 import { assign, merge } from '@ember/polyfills';
 import { isNone, typeOf } from '@ember/utils';
 import { get } from '@ember/object';
-import { assert, warn, deprecate } from '@ember/debug';
+import { assert, warn } from '@ember/debug';
 import { getOwner } from '@ember/application';
 import Serializer from '@ember-data/serializer';
-import require, { has } from 'require';
+import require from 'require';
 import { DEBUG } from '@glimmer/env';
 
 import { errorsArrayToHash } from '@ember-data/adapter/error';
