@@ -13,7 +13,7 @@ import { default as RSVP, Promise } from 'rsvp';
 import Service from '@ember/service';
 import { typeOf, isPresent, isNone } from '@ember/utils';
 
-import require, { has } from 'require';
+import require from 'require';
 import Ember from 'ember';
 import { InvalidError } from '@ember-data/adapter/error';
 import { assert, deprecate, warn, inspect } from '@ember/debug';
@@ -3111,9 +3111,9 @@ const Store = Service.extend({
     // final fallback, no model specific serializer, no application serializer, no
     // `serializer` property on store: use json-api serializer
     serializer = _serializerCache['-default'] || owner.lookup('serializer:-default');
-    if (DEBUG && serializer === undefined && has('@ember-data/serializer/json-api')) {
-      const JSONAPISerializer = require('@ember-data/serializer/json-api').default;
-      owner.register('serializer:-default', JSONAPISerializer);
+    if (DEBUG && serializer === undefined) {
+      const JSONSerializer = require('@ember-data/serializer/json').default;
+      owner.register('serializer:-default', JSONSerializer);
       serializer = owner.lookup('serializer:-default');
     } else {
       assert(
