@@ -4,8 +4,6 @@ import { get } from '@ember/object';
 import { assert, warn } from '@ember/debug';
 import { getOwner } from '@ember/application';
 import Serializer from '@ember-data/serializer';
-import require from 'require';
-import { DEBUG } from '@glimmer/env';
 
 import { errorsArrayToHash } from '@ember-data/adapter/error';
 import { modelHasAttributeOrRelationshipNamedType } from './-private';
@@ -1494,21 +1492,6 @@ const JSONSerializer = Serializer.extend({
   */
   transformFor(attributeType, skipAssertion) {
     let transform = getOwner(this).lookup('transform:' + attributeType);
-
-    if (DEBUG && !transform) {
-      if (['date', 'number', 'string', 'boolean'].includes(attributeType)) {
-        const Mapping = {
-          date: 'DateTransform',
-          boolean: 'BooleanTransform',
-          number: 'NumberTransform',
-          string: 'StringTransform',
-        };
-
-        const Transform = require(`@ember-data/serializer/-private`)[Mapping[attributeType]];
-        getOwner(this).register(`transform:${attributeType}`, Transform);
-        transform = getOwner(this).lookup(`transform:${attributeType}`);
-      }
-    }
 
     assert(
       `Unable to find the transform for \`attr('${attributeType}')\``,

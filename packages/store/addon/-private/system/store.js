@@ -194,6 +194,29 @@ const Store = Service.extend({
     this.storeWrapper = new RecordDataStoreWrapper(this);
 
     if (DEBUG) {
+      // support for moduleFor style unit tests
+      // that were relying on ember-test-helpers
+      // doing an auto-registration of the transform
+      // or us doing one
+      const Mapping = {
+        date: 'DateTransform',
+        boolean: 'BooleanTransform',
+        number: 'NumberTransform',
+        string: 'StringTransform',
+      };
+
+      Object.keys(Mapping).forEach(attributeType => {
+        const transform = getOwner(this).lookup(`transform:${attributeType}`);
+
+        if (!transform) {
+          // we don't deprecate this because the moduleFor style tests with the closed
+          // resolver will be deprecated on their own. When that deprecation completes
+          // we can drop this.
+          const Transform = require(`@ember-data/serializer/-private`)[Mapping[attributeType]];
+          getOwner(this).register(`transform:${attributeType}`, Transform);
+        }
+      });
+
       this.shouldAssertMethodCallsOnDestroyedStore =
         this.shouldAssertMethodCallsOnDestroyedStore || false;
       if (this.shouldTrackAsyncRequests === undefined) {
