@@ -3079,6 +3079,14 @@ const Store = Service.extend({
     let owner = getOwner(this);
 
     serializer = owner.lookup(`serializer:${normalizedModelName}`);
+
+    // getting rid of this case will be handed by the deprecation of moduleFor in ember test helpers
+    if (DEBUG && serializer === undefined && normalizedModelName === '-json-api') {
+      const Serializer = require('@ember-data/serializer/json-api').default;
+      owner.register(`serializer:-json-api`, Serializer);
+      serializer = owner.lookup(`serializer:-json-api`);
+    }
+
     if (serializer !== undefined) {
       set(serializer, 'store', this);
       _serializerCache[normalizedModelName] = serializer;
