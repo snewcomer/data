@@ -13,6 +13,7 @@ import { default as RSVP, Promise } from 'rsvp';
 import Service from '@ember/service';
 import { typeOf, isPresent, isNone } from '@ember/utils';
 
+import require, { has } from 'require';
 import Ember from 'ember';
 import { InvalidError } from '@ember-data/adapter/error';
 import { assert, deprecate, warn, inspect } from '@ember/debug';
@@ -3087,10 +3088,22 @@ const Store = Service.extend({
     // final fallback, no model specific serializer, no application serializer, no
     // `serializer` property on store: use json-api serializer
     serializer = _serializerCache['-default'] || owner.lookup('serializer:-default');
-    assert(
-      `No serializer was found for '${modelName}' and no 'application', Adapter.defaultSerializer, or '-default' serializer were found as fallbacks.`,
-      serializer !== undefined
-    );
+    if (DEBUG && serializer === undefined && has('@ember-data/serializer/json-api')) {
+      const JSONAPISerializer = require('@ember-data/serializer/json-api').default;
+      owner.register('serializer:-default', JSONAPISerializer);
+      serializer = owner.lookup('serializer:-default');
+    } else {
+      assert(
+        `No serializer was found for '${modelName}' and no 'application' serializer was found as a fallback`,
+        serializer !== undefined
+      );
+    }
+
+    deprecate(`Usage of the '-default' serializer is deprecated.`, false, {
+      id: 'ember-data:default-serializer-fallback',
+      until: '3.12.0',
+    });
+
     set(serializer, 'store', this);
     _serializerCache[normalizedModelName] = serializer;
     _serializerCache['-default'] = serializer;

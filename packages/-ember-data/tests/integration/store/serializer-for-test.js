@@ -1,7 +1,7 @@
 import { setupTest } from 'ember-qunit';
 import { module, test } from 'qunit';
 import Store from 'ember-data/store';
-
+import testInProduction from 'dummy/tests/helpers/test-in-production';
 class TestAdapter {
   constructor(args) {
     Object.assign(this, args);
@@ -38,7 +38,7 @@ module('integration/store - serializerFor', function(hooks) {
     store = owner.lookup('service:store');
   });
 
-  test('when no serializer is available we throw an error', async function(assert) {
+  testInProduction('when no serializer is available we throw an error', async function(assert) {
     let { owner } = this;
     /*
       serializer:-default is the "last chance" fallback and is

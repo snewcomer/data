@@ -13,7 +13,6 @@ import Snapshot from '../snapshot';
 import OrderedSet from '../ordered-set';
 import ManyArray from '../many-array';
 import { PromiseBelongsTo, PromiseManyArray } from '../promise-proxies';
-
 import { RecordReference, BelongsToReference, HasManyReference } from '../references';
 import { default as recordDataFor, relationshipStateFor } from '../record-data-for';
 import RecordDataDefault from './record-data';
@@ -503,12 +502,12 @@ export default class InternalModel {
     let parentInternalModel = this;
     let async = relationshipMeta.options.async;
     let isAsync = typeof async === 'undefined' ? true : async;
-    let _belongsToState = { 
-      key, 
-      store, 
+    let _belongsToState = {
+      key,
+      store,
       originatingInternalModel: this,
-      modelName: relationshipMeta.type
-    }
+      modelName: relationshipMeta.type,
+    };
 
     if (isAsync) {
       let internalModel =
