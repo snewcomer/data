@@ -24,7 +24,7 @@ import RecordData from '../../ts-interfaces/record-data';
 import { JsonApiResource, JsonApiValidationError } from '../../ts-interfaces/record-data-json-api';
 import { Record } from '../../ts-interfaces/record';
 import { Dict } from '../../ts-interfaces/utils';
-import { IDENTIFIERS, RECORD_DATA_ERRORS, RECORD_DATA_STATE } from '@ember-data/canary-features';
+import { IDENTIFIERS, RECORD_DATA_ERRORS, RECORD_DATA_STATE, REQUEST_SERVICE } from '@ember-data/canary-features';
 import { identifierCacheFor } from '../../identifiers/cache';
 import { RecordIdentifier } from '../../ts-interfaces/identifier';
 import { internalModelFactoryFor } from '../store/internal-model-factory';
@@ -136,7 +136,7 @@ export default class InternalModel {
   currentState: any;
   error: any;
 
-  constructor(public store: Store, private identifier: RecordIdentifier) {
+  constructor(public store: Store, public identifier: RecordIdentifier) {
     this.id = identifier.id;
     this.modelName = identifier.type;
     this.clientId = identifier.lid;
@@ -337,9 +337,12 @@ export default class InternalModel {
         store,
         _internalModel: this,
         currentState: this.currentState,
-        isError: this.isError,
-        adapterError: this.error,
       };
+
+      if (!REQUEST_SERVICE) {
+        createOptions.isError = this.isError;
+        createOptions.adapterError = this.error;
+      }
 
       if (properties !== undefined) {
         assert(
@@ -480,8 +483,12 @@ export default class InternalModel {
     let promiseLabel = 'DS: Model#save ' + this;
     let resolver = RSVP.defer<InternalModel>(promiseLabel);
 
-    this.store.scheduleSave(this, resolver, options);
-    return resolver.promise;
+    if (REQUEST_SERVICE) {
+      return this.store.scheduleSave(this, resolver, options);
+    } else {
+      this.store.scheduleSave(this, resolver, options);
+      return resolver.promise;
+    }
   }
 
   startedReloading() {
@@ -509,28 +516,54 @@ export default class InternalModel {
   }
 
   reload(options) {
-    this.startedReloading();
-    let internalModel = this;
-    let promiseLabel = 'DS: Model#reload of ' + this;
+    if (REQUEST_SERVICE) {
+      if (!options) {
+        options = {};
+      }
+      this.startedReloading();
+      let internalModel = this;
+      let promiseLabel = 'DS: Model#reload of ' + this;
 
-    return new Promise(function(resolve) {
-      internalModel.send('reloadRecord', { resolve, options });
-    }, promiseLabel)
-      .then(
-        function() {
-          internalModel.didCleanError();
-          return internalModel;
-        },
-        function(error) {
-          internalModel.didError(error);
-          throw error;
-        },
-        'DS: Model#reload complete, update flags'
-      )
-      .finally(function() {
-        internalModel.finishedReloading();
-        internalModel.updateRecordArrays();
-      });
+      return internalModel.store
+        ._reloadRecord(internalModel, options)
+        .then(
+          function() {
+            //TODO NOW seems like we shouldn't need to do this
+            return internalModel;
+          },
+          function(error) {
+            throw error;
+          },
+          'DS: Model#reload complete, update flags'
+        )
+        .finally(function() {
+          internalModel.finishedReloading();
+          internalModel.updateRecordArrays();
+        });
+    } else {
+      this.startedReloading();
+      let internalModel = this;
+      let promiseLabel = 'DS: Model#reload of ' + this;
+
+      return new Promise(function(resolve) {
+        internalModel.send('reloadRecord', { resolve, options });
+      }, promiseLabel)
+        .then(
+          function() {
+            internalModel.didCleanError();
+            return internalModel;
+          },
+          function(error) {
+            internalModel.didError(error);
+            throw error;
+          },
+          'DS: Model#reload complete, update flags'
+        )
+        .finally(function() {
+          internalModel.finishedReloading();
+          internalModel.updateRecordArrays();
+        });
+    }
   }
 
   /*
@@ -908,7 +941,7 @@ export default class InternalModel {
     @private
   */
   createSnapshot(options) {
-    return new Snapshot(this, options);
+    return new Snapshot(options || {}, { id: this.id, lid: this.clientId, type: this.modelName }, this.store);
   }
 
   /*
@@ -1280,26 +1313,30 @@ export default class InternalModel {
   }
 
   didError(error) {
-    this.error = error;
-    this.isError = true;
+    if (!REQUEST_SERVICE) {
+      this.error = error;
+      this.isError = true;
 
-    if (this.hasRecord) {
-      this._record.setProperties({
-        isError: true,
-        adapterError: error,
-      });
+      if (this.hasRecord) {
+        this._record.setProperties({
+          isError: true,
+          adapterError: error,
+        });
+      }
     }
   }
 
   didCleanError() {
-    this.error = null;
-    this.isError = false;
+    if (!REQUEST_SERVICE) {
+      this.error = null;
+      this.isError = false;
 
-    if (this.hasRecord) {
-      this._record.setProperties({
-        isError: false,
-        adapterError: null,
-      });
+      if (this.hasRecord) {
+        this._record.setProperties({
+          isError: false,
+          adapterError: null,
+        });
+      }
     }
   }
 
