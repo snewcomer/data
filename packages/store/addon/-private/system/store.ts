@@ -56,7 +56,6 @@ import {
   JsonApiDocument,
   ExistingResourceObject,
 } from '../ts-interfaces/ember-data-json-api';
-import hasValidId from '../utils/has-valid-id';
 import constructResource from '../utils/construct-resource';
 const emberRun = emberRunLoop.backburner;
 
