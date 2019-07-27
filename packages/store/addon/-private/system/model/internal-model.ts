@@ -194,7 +194,7 @@ export default class InternalModel {
 
   get _recordData(): RecordData {
     if (this.__recordData === null) {
-      let recordData = this.store._createRecordData(this.modelName, this.id, this.clientId);
+      let recordData = this.store._createRecordData(this.identifier);
       this._recordData = recordData;
       return recordData;
     }

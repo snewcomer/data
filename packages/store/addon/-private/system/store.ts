@@ -43,7 +43,7 @@ import { Record } from '../ts-interfaces/record';
 import promiseRecord from '../utils/promise-record';
 import { identifierCacheFor, IdentifierCache } from '../identifiers/cache';
 import { internalModelFactoryFor } from './store/internal-model-factory';
-import { RecordIdentifier } from '../ts-interfaces/identifier';
+import { RecordIdentifier, StableRecordIdentifier } from '../ts-interfaces/identifier';
 import RecordData from '../ts-interfaces/record-data';
 import { RecordReference } from './references';
 import { Backburner } from '@ember/runloop/-private/backburner';
@@ -57,6 +57,7 @@ import {
   ExistingResourceObject,
 } from '../ts-interfaces/ember-data-json-api';
 import hasValidId from '../utils/has-valid-id';
+import constructResource from '../utils/construct-resource';
 const emberRun = emberRunLoop.backburner;
 
 const { ENV } = Ember;
@@ -389,7 +390,7 @@ class Store extends Service {
         properties.id = coerceId(properties.id);
 
         const factory = internalModelFactoryFor(this);
-        const internalModel = factory.build(normalizedModelName, properties.id);
+        const internalModel = factory.build({ type: normalizedModelName, id: properties.id });
 
         internalModel.loadedData();
         // TODO this exists just to proxy `isNew` to RecordData which is weird
@@ -745,18 +746,19 @@ class Store extends Service {
       typeof modelName === 'string'
     );
 
-    const normalizedModelName = normalizeModelName(modelName);
+    const type = normalizeModelName(modelName);
     const normalizedId = ensureStringId(id);
-    const internalModel = internalModelFactoryFor(this).lookup(normalizedModelName, normalizedId, null);
+    const resource = constructResource(type, normalizedId);
+    const internalModel = internalModelFactoryFor(this).lookup(resource);
     options = options || {};
 
-    if (!this.hasRecordForId(normalizedModelName, normalizedId)) {
+    if (!this.hasRecordForId(type, normalizedId)) {
       return this._findByInternalModel(internalModel, options);
     }
 
     let fetchedInternalModel = this._findRecord(internalModel, options);
 
-    return promiseRecord(fetchedInternalModel, `DS: Store#findRecord ${normalizedModelName} with id: ${id}`);
+    return promiseRecord(fetchedInternalModel, `DS: Store#findRecord ${type} with id: ${id}`);
   }
 
   _findRecord(internalModel, options) {
@@ -1121,12 +1123,11 @@ class Store extends Service {
     if (DEBUG) {
       assertDestroyingStore(this, 'getReference');
     }
-    const normalizedModelName = normalizeModelName(modelName);
+    const type = normalizeModelName(modelName);
     const normalizedId = ensureStringId(id);
+    const resource = constructResource(type, normalizedId);
 
-    assert(`You must pass a valid id to getReference`, typeof normalizedId === 'string' && normalizedId.length > 0);
-
-    return internalModelFactoryFor(this).lookup(normalizedModelName, normalizedId, null).recordReference;
+    return internalModelFactoryFor(this).lookup(resource).recordReference;
   }
 
   /**
@@ -1161,12 +1162,13 @@ class Store extends Service {
       `Passing classes to store methods has been removed. Please pass a dasherized string instead of ${modelName}`,
       typeof modelName === 'string'
     );
-    let normalizedModelName = normalizeModelName(modelName);
+    const type = normalizeModelName(modelName);
     const normalizedId = ensureStringId(id);
 
-    if (this.hasRecordForId(normalizedModelName, normalizedId)) {
+    if (this.hasRecordForId(type, normalizedId)) {
+      const resource = constructResource(type, normalizedId);
       return internalModelFactoryFor(this)
-        .lookup(normalizedModelName, normalizedId, null)
+        .lookup(resource)
         .getRecord();
     } else {
       return null;
@@ -1229,10 +1231,13 @@ class Store extends Service {
       typeof modelName === 'string'
     );
 
-    const normalizedModelName = normalizeModelName(modelName);
+    const type = normalizeModelName(modelName);
     const trueId = ensureStringId(id);
+    const resource = { type, id: trueId };
 
-    const internalModel = internalModelFactoryFor(this).peek(normalizedModelName, trueId, null);
+    const identifier = this.identifierCache.getOrCreateRecordIdentifier(resource);
+
+    const internalModel = internalModelFactoryFor(this).peek(identifier);
 
     return !!internalModel && internalModel.isLoaded();
   }
@@ -1257,10 +1262,10 @@ class Store extends Service {
       typeof modelName === 'string'
     );
 
-    const trueId = ensureStringId(id);
+    const resource = constructResource(modelName, ensureStringId(id));
 
     return internalModelFactoryFor(this)
-      .lookup(modelName, trueId, null)
+      .lookup(resource)
       .getRecord();
   }
 
@@ -2247,11 +2252,9 @@ class Store extends Service {
     @param {Object} data
   */
   _load(data: ExistingResourceObject) {
-    const modelName = normalizeModelName(data.type);
-    const id = ensureStringId(data.id);
-    const lid = coerceId(data.lid);
+    const resource = constructResource(normalizeModelName(data.type), ensureStringId(data.id), coerceId(data.lid));
 
-    let internalModel = internalModelFactoryFor(this).lookup(modelName, id, lid, data);
+    let internalModel = internalModelFactoryFor(this).lookup(resource, data);
 
     // store.push will be from empty
     // findRecord will be from root.loading
@@ -2272,11 +2275,7 @@ class Store extends Service {
           // determined the correct identifier to use, make sure
           // that we also use the correct internalModel.
           identifier = updatedIdentifier;
-          internalModel = internalModelFactoryFor(this).lookup(
-            identifier.type,
-            identifier.id as string,
-            identifier.lid
-          );
+          internalModel = internalModelFactoryFor(this).lookup(identifier);
         }
       }
     }
@@ -2764,17 +2763,27 @@ class Store extends Service {
    *
    * @internal
    */
-  _internalModelForId(modelName: string, id: string | null, lid: string | null): InternalModel {
-    if (!hasValidId(id, lid)) {
-      throw new Error(`Expected id or lid to be a string with some length`);
-    }
-    return internalModelFactoryFor(this).lookup(modelName, id, lid);
+  _internalModelForId(type: string, id: string | null, lid: string | null): InternalModel {
+    const resource = constructResource(type, id, lid);
+    return internalModelFactoryFor(this).lookup(resource);
   }
 
-  _createRecordData(modelName, id, clientId): RecordData {
-    return this.createRecordDataFor(modelName, id, clientId, this._storeWrapper);
+  /**
+   * @internal
+   */
+  _createRecordData(identifier: StableRecordIdentifier): RecordData {
+    return this.createRecordDataFor(identifier.type, identifier.id, identifier.lid, this._storeWrapper);
   }
 
+  /**
+   * Instantiation hook allowing applications or addons to configure the store
+   * to utilize a custom RecordData implementation.
+   *
+   * @param modelName
+   * @param id
+   * @param clientId
+   * @param storeWrapper
+   */
   createRecordDataFor(modelName, id, clientId, storeWrapper): RecordData {
     if (IDENTIFIERS) {
       let identifier = identifierCacheFor(this).getOrCreateRecordIdentifier({
@@ -2788,13 +2797,11 @@ class Store extends Service {
     }
   }
 
-  recordDataFor(modelName: string, id: string, clientId?: string | null): RecordData;
-  recordDataFor(modelName: string, id: string | null, clientId: string): RecordData;
-  recordDataFor(modelName: string, id: string | null, clientId?: string | null): RecordData {
-    if (!hasValidId(id, clientId)) {
-      throw new Error(`Expected either id or clientId to be valid id`);
-    }
-    let internalModel = internalModelFactoryFor(this).lookup(modelName, id, clientId);
+  /**
+   * @internal
+   */
+  recordDataFor(identifier: StableRecordIdentifier): RecordData {
+    let internalModel = internalModelFactoryFor(this).lookup(identifier);
     return recordDataFor(internalModel);
   }
 
@@ -2835,6 +2842,9 @@ class Store extends Service {
   }
 
   newClientId() {
+    if (IDENTIFIERS) {
+      throw new Error(`Private API Removed`);
+    }
     return globalClientIdCounter++;
   }
 
