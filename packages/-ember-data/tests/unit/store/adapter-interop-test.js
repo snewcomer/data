@@ -2,8 +2,10 @@ import { A } from '@ember/array';
 import { resolve, all, Promise as EmberPromise } from 'rsvp';
 import { set, get } from '@ember/object';
 import { run } from '@ember/runloop';
+import JSONAPISerializer from '@ember-data/serializer/json-api';
 import { createStore } from 'dummy/tests/helpers/store';
 import setupStore from 'dummy/tests/helpers/store';
+import { setupTest } from 'ember-qunit';
 
 import testInDebug from 'dummy/tests/helpers/test-in-debug';
 import { module, test } from 'qunit';
@@ -12,9 +14,14 @@ import DS from 'ember-data';
 
 let TestAdapter, store;
 
-module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', function(hooks) {
+module('scott unit/store/adapter-interop - DS.Store working with a DS.Adapter', function(hooks) {
+  setupTest(hooks);
+
   hooks.beforeEach(function() {
+    this.owner.register('serializer:-default', JSONAPISerializer);
+
     TestAdapter = DS.Adapter.extend();
+    store = this.owner.lookup('service:store');
   });
 
   hooks.afterEach(function() {
@@ -26,34 +33,31 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
   });
 
   test('Adapter can be set as a factory', function(assert) {
-    store = createStore({ adapter: TestAdapter });
+    this.owner.register('adapter:-test', TestAdapter);
+    store.adapter = '-test';
 
-    assert.ok(store.get('defaultAdapter') instanceof TestAdapter);
+    assert.ok(store.get('defaultAdapter') instanceof TestAdapter, 'defaultAdapter is set');
   });
 
   test('Adapter can be set as a name', function(assert) {
-    store = createStore({ adapter: '-rest' });
+    store.adapter = 'application';
 
-    assert.ok(store.get('defaultAdapter') instanceof DS.RESTAdapter);
+    assert.ok(store.get('defaultAdapter') instanceof DS.RESTAdapter, 'default Adapter is set');
   });
 
   testInDebug('Adapter can not be set as an instance', function(assert) {
     assert.expect(1);
 
-    store = DS.Store.create({
-      adapter: DS.Adapter.create(),
-    });
+    store.adapter = DS.Adapter.create();
     assert.expectAssertion(() => store.get('defaultAdapter'));
   });
 
   test('Calling Store#find invokes its adapter#find', function(assert) {
-    assert.expect(5);
+    assert.expect(4);
 
-    let currentStore;
     const Adapter = TestAdapter.extend({
       findRecord(store, type, id, snapshot) {
         assert.ok(true, 'Adapter#find was called');
-        assert.equal(store, currentStore, 'Adapter#find was called with the right store');
         assert.equal(type, store.modelFor('test'), 'Adapter#find was called with the type passed into Store#find');
         assert.equal(id, 1, 'Adapter#find was called with the id passed into Store#find');
         assert.equal(snapshot.id, '1', 'Adapter#find was called with the record created from Store#find');
@@ -67,14 +71,13 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
       },
     });
 
+    this.owner.register('adapter:-test', Adapter);
+    store.adapter = '-test';
+
     const Type = DS.Model.extend();
+    this.owner.register('model:test', Type);
 
-    currentStore = createStore({
-      adapter: Adapter,
-      test: Type,
-    });
-
-    return run(() => currentStore.findRecord('test', 1));
+    store.findRecord('test', 1);
   });
 
   test('Calling Store#findRecord multiple times coalesces the calls into a adapter#findMany call', function(assert) {
@@ -92,15 +95,14 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
       coalesceFindRequests: true,
     });
 
-    const Type = DS.Model.extend();
-    let store = createStore({
-      adapter: Adapter,
-      test: Type,
-    });
+    this.owner.register('adapter:-test', Adapter);
+    store.adapter = '-test';
 
-    return run(() => {
-      return all([store.findRecord('test', 1), store.findRecord('test', 2)]);
-    });
+    const Type = DS.Model.extend();
+    this.owner.register('model:test', Type);
+
+    store.findRecord('test', 1);
+    store.findRecord('test', 2);
   });
 
   test('Returning a promise from `findRecord` asynchronously loads data', function(assert) {
@@ -112,19 +114,16 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
       },
     });
 
+    this.owner.register('adapter:-test', Adapter);
+    store.adapter = '-test';
+
     const Type = DS.Model.extend({
       name: DS.attr('string'),
     });
+    this.owner.register('model:test', Type);
 
-    let store = createStore({
-      adapter: Adapter,
-      test: Type,
-    });
-
-    return run(() => {
-      return store.findRecord('test', 1).then(object => {
-        assert.strictEqual(get(object, 'name'), 'Scumbag Dale', 'the data was pushed');
-      });
+    store.findRecord('test', 1).then(object => {
+      assert.strictEqual(get(object, 'name'), 'Scumbag Dale', 'the data was pushed');
     });
   });
 
@@ -138,87 +137,83 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
       },
     });
 
+    this.owner.register('adapter:-test', Adapter);
+    store.adapter = '-test';
+
     const Type = DS.Model.extend({
       name: DS.attr('string'),
     });
+    this.owner.register('model:test', Type);
 
-    let store = createStore({
-      adapter: Adapter,
-      test: Type,
-    });
-
-    return run(() => {
-      return store
-        .findRecord('test', 1)
-        .then(object => {
-          assert.equal(typeof object.get('id'), 'string', 'id was coerced to a string');
-          run(() => {
-            store.push({
-              data: {
-                type: 'test',
-                id: '2',
-                attributes: {
-                  name: 'Scumbag Sam Saffron',
-                },
+    store
+      .findRecord('test', 1)
+      .then(object => {
+        assert.equal(typeof object.get('id'), 'string', 'id was coerced to a string');
+        run(() => {
+          store.push({
+            data: {
+              type: 'test',
+              id: '2',
+              attributes: {
+                name: 'Scumbag Sam Saffron',
               },
-            });
+            },
           });
-
-          return store.findRecord('test', 2);
-        })
-        .then(object => {
-          assert.ok(object, 'object was found');
-          assert.equal(
-            typeof object.get('id'),
-            'string',
-            'id is a string despite being supplied and searched for as a number'
-          );
         });
-    });
+
+        return store.findRecord('test', 2);
+      })
+      .then(object => {
+        assert.ok(object, 'object was found');
+        assert.equal(
+          typeof object.get('id'),
+          'string',
+          'id is a string despite being supplied and searched for as a number'
+        );
+      });
   });
 
   test('can load data for the same record if it is not dirty', function(assert) {
     assert.expect(3);
 
+    const Adapter = DS.Adapter.extend({
+      shouldBackgroundReloadRecord() {
+        return false;
+      },
+    });
+
+    this.owner.register('adapter:-test', Adapter);
+    store.adapter = '-test';
+
     const Person = DS.Model.extend({
       name: DS.attr('string'),
     });
+    this.owner.register('model:person', Person);
 
-    let store = createStore({
-      person: Person,
-      adapter: DS.Adapter.extend({
-        shouldBackgroundReloadRecord() {
-          return false;
+    store.push({
+      data: {
+        type: 'person',
+        id: '1',
+        attributes: {
+          name: 'Tom Dale',
         },
-      }),
+      },
     });
 
-    return run(() => {
+    store.findRecord('person', 1).then(tom => {
+      assert.equal(get(tom, 'hasDirtyAttributes'), false, 'precond - record is not dirty');
+      assert.equal(get(tom, 'name'), 'Tom Dale', 'returns the correct name');
+
       store.push({
         data: {
           type: 'person',
           id: '1',
           attributes: {
-            name: 'Tom Dale',
+            name: 'Captain Underpants',
           },
         },
       });
-
-      return store.findRecord('person', 1).then(tom => {
-        assert.equal(get(tom, 'hasDirtyAttributes'), false, 'precond - record is not dirty');
-        assert.equal(get(tom, 'name'), 'Tom Dale', 'returns the correct name');
-
-        store.push({
-          data: {
-            type: 'person',
-            id: '1',
-            attributes: {
-              name: 'Captain Underpants',
-            },
-          },
-        });
-        assert.equal(get(tom, 'name'), 'Captain Underpants', 'updated record with new date');
-      });
+      assert.equal(get(tom, 'name'), 'Captain Underpants', 'updated record with new date');
     });
   });
 
@@ -230,6 +225,7 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
     const Person = DS.Model.extend({
       name: DS.attr('string'),
     });
+    this.owner.register('model:person', Person);
 
     const Adapter = TestAdapter.extend({
       query(store, type, query) {
@@ -238,13 +234,10 @@ module('unit/store/adapter-interop - DS.Store working with a DS.Adapter', functi
         return resolve({ data: [] });
       },
     });
+    this.owner.register('adapter:-test', Adapter);
+    store.adapter = '-test';
 
-    let store = createStore({
-      adapter: Adapter,
-      person: Person,
-    });
-
-    run(() => store.query('person', passedQuery));
+    store.query('person', passedQuery);
   });
 
   test('Find with query calls the correct normalizeResponse', function(assert) {
